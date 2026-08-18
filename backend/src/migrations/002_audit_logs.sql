@@ -1,0 +1,2 @@
+-- TODO (Fase 1.2): Audit & upload tables
+-- audit_logs, upload_history, export_configs

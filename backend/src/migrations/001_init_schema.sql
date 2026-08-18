@@ -1,0 +1,3 @@
+-- TODO (Fase 1.2): Schema utama
+-- users, user_sessions, raw_log_plus, raw_vr_learning,
+-- processed_mandatory_2026, processed_summary_all

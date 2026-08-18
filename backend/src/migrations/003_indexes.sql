@@ -1,0 +1,3 @@
+-- TODO (Fase 1.2): Indexes untuk performa query
+-- idx_user_email, idx_session_user_id, idx_raw_log_upload,
+-- idx_raw_vr_upload, idx_audit_user, idx_audit_action, idx_audit_created

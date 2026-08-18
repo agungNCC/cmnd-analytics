@@ -12,3 +12,6 @@ pnpm-debug.log*
 coverage/
 .idea/
 .vscode/
+backend/uploads/
+backend/logs/
+*.log
