@@ -1,8 +1,13 @@
 import jwt from 'jsonwebtoken'
 
+/**
+ * Verifikasi JWT dari Authorization header ATAU httpOnly cookie.
+ * Menyimpan decoded payload ke req.user.
+ */
 export const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]
-    || req.cookies?.auth_token
+  const token =
+    req.headers.authorization?.split(' ')[1] ||
+    req.cookies?.auth_token
 
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: no token provided' })
@@ -16,8 +21,14 @@ export const verifyToken = (req, res, next) => {
   }
 }
 
+/**
+ * Pastikan req.user.role ada di daftar role yang diizinkan.
+ * Gunakan setelah verifyToken.
+ *
+ * Contoh: requireRole('admin', 'uploader')
+ */
 export const requireRole = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user?.role)) {
+  if (!req.user || !roles.includes(req.user.role)) {
     return res.status(403).json({ error: 'Forbidden: insufficient permissions' })
   }
   next()
