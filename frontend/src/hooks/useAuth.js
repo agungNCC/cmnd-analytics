@@ -1,22 +1,54 @@
-// TODO (Fase 3.1): Auth context & hook
-import { createContext, useContext, useState, useEffect } from 'react'
-import { getMe } from '../services/auth.js'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import * as authService from '../services/auth.js'
 
 const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser]       = useState(null)
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getMe()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false))
+  const refreshUser = useCallback(async () => {
+    try {
+      const currentUser = await authService.getMe()
+      setUser(currentUser)
+      return currentUser
+    } catch {
+      setUser(null)
+      return null
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
+  const login = useCallback(async (email, password) => {
+    const currentUser = await authService.login(email, password)
+    setUser(currentUser)
+    return currentUser
+  }, [])
+
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout()
+    } finally {
+      setUser(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshUser()
+  }, [refreshUser])
+
+  const value = useMemo(() => ({
+    user,
+    loading,
+    login,
+    logout,
+    refreshUser,
+    isAuthenticated: Boolean(user),
+  }), [user, loading, login, logout, refreshUser])
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,6 +1,5 @@
-// TODO (Fase 3.1): Auth service
-// login(email, password), logout(), getMe()
-import api, { setToken, clearToken } from './api.js'
+import api from './api.js'
+import { clearToken, setToken } from './storage.js'
 
 export const login = async (email, password) => {
   const { data } = await api.post('/api/auth/login', { email, password })
