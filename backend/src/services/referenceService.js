@@ -170,7 +170,7 @@ export const getMcReference = async () => {
     }
   }
 
-  return { wb, sheetName, rows, headerRowIndex, a1Title }
+  return { wb, sheetName, rows, headerRowIndex, a1Title, filePath }
 }
 
 /**

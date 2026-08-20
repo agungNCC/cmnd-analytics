@@ -505,8 +505,60 @@ const buildMcSheetXml = async (rows) => {
   )
 }
 
-const attachMcSheet = async (zip, workbookXml, workbookRels, contentTypes, sheetName, rows) => {
-  zip.file('xl/worksheets/sheet5.xml', await buildMcSheetXml(rows))
+const resolveZipTarget = (target) => {
+  const cleaned = String(target || '').replace(/^\//, '')
+  if (cleaned.startsWith('xl/')) return cleaned
+  return `xl/${cleaned}`
+}
+
+const inlineSharedStringsInSheet = (sheetXml, sharedStrings) => (
+  sheetXml.replace(
+    /<c([^>]*\bt="s"[^>]*)>(.*?)<\/c>/g,
+    (full, attrs, body) => {
+      const index = Number(body.match(/<v>(\d+)<\/v>/)?.[1])
+      if (!Number.isFinite(index)) return full
+      const text = sharedStrings[index] ?? ''
+      const cleanAttrs = attrs
+        .replace(/\bt="s"/, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      return `<c ${cleanAttrs} t="inlineStr"><is><t xml:space="preserve">${xmlEscape(text)}</t></is></c>`
+    },
+  )
+)
+
+const attachMcSheet = async (zip, workbookXml, workbookRels, contentTypes, sheetName, mcFilePath) => {
+  const mcZip = await JSZip.loadAsync(fs.readFileSync(mcFilePath))
+  const mcWorkbook = await mcZip.file('xl/workbook.xml').async('string')
+  const firstSheetId = mcWorkbook.match(/<sheet\b[^>]*r:id="([^"]+)"/)?.[1]
+  if (!firstSheetId) throw new Error('MC workbook has no sheets')
+
+  const mcRels = await mcZip.file('xl/_rels/workbook.xml.rels').async('string')
+  const target = [...mcRels.matchAll(/<Relationship\b([^>]*)\/>/g)]
+    .map((match) => match[1])
+    .find((attrs) => attrs.includes(`Id="${firstSheetId}"`))
+    ?.match(/\bTarget="([^"]+)"/)?.[1]
+
+  if (!target) throw new Error('MC worksheet target not found')
+  const sheetPath = resolveZipTarget(target)
+  const sheetFile = mcZip.file(sheetPath)
+  if (!sheetFile) throw new Error(`MC worksheet missing: ${sheetPath}`)
+
+  let sheetXml = await sheetFile.async('string')
+  const sharedFile = mcZip.file('xl/sharedStrings.xml')
+  if (sharedFile && sheetXml.includes('t="s"')) {
+    const sharedXml = await sharedFile.async('string')
+    const sharedStrings = parseSharedStrings(sharedXml)
+    sheetXml = inlineSharedStringsInSheet(sheetXml, sharedStrings)
+  }
+
+  // Drop drawing/printer relationships that are not copied into the export package.
+  sheetXml = sheetXml
+    .replace(/<drawing\b[^>]*\/>/g, '')
+    .replace(/<legacyDrawing\b[^>]*\/>/g, '')
+    .replace(/<pageSetup\b[^>]*\/>/g, '')
+
+  zip.file('xl/worksheets/sheet5.xml', sheetXml)
 
   const safeName = xmlEscape(sheetName).slice(0, 31)
   const nextWorkbook = workbookXml.replace(
@@ -682,7 +734,7 @@ export const buildSampleBasedExportBuffer = async () => {
     workbookRels,
     contentTypes,
     mcRef.sheetName,
-    mcRef.rows,
+    mcRef.filePath,
   )
 
   zip.remove('xl/calcChain.xml')
