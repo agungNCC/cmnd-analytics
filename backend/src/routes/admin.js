@@ -86,8 +86,19 @@ router.put('/users/:id', async (req, res, next) => {
       }
       payload.role = role
     }
-    if (username !== undefined) payload.username = username
-    if (email !== undefined) payload.email = email
+    if (username !== undefined) {
+      const value = String(username).trim()
+      if (!value) return res.status(400).json({ error: 'username is required' })
+      payload.username = value
+    }
+    if (email !== undefined) {
+      const value = String(email).toLowerCase().trim()
+      if (!value) return res.status(400).json({ error: 'email is required' })
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        return res.status(400).json({ error: 'email format is invalid' })
+      }
+      payload.email = value
+    }
     if (full_name !== undefined) payload.full_name = full_name
     if (department !== undefined) payload.department = department
     if (is_active !== undefined) payload.is_active = Boolean(is_active)
@@ -98,12 +109,19 @@ router.put('/users/:id', async (req, res, next) => {
       payload.password = password
     }
 
+    if (Object.keys(payload).length === 0) {
+      return res.status(400).json({ error: 'No fields to update' })
+    }
+
     const existing = await findById(id)
     if (!existing) {
       return res.status(404).json({ error: 'User not found' })
     }
 
     const updated = await updateUser(id, payload)
+    if (!updated) {
+      return res.status(404).json({ error: 'User not found' })
+    }
     await logAudit({
       userId: req.user.id,
       username: req.user.username,

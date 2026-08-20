@@ -46,10 +46,14 @@ export default function UserManagement() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, payload }) => {
       const { data } = await api.put(`/api/admin/users/${id}`, payload)
-      return data
+      return { data, payload }
     },
-    onSuccess: () => {
+    onSuccess: ({ data, payload }) => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      if (payload?.email && data?.email && data.email !== String(payload.email).toLowerCase().trim()) {
+        toast.error('Email was not updated on the server. Redeploy the latest backend, then try again.')
+        return
+      }
       toast.success('User updated')
       closeForm()
     },
@@ -102,8 +106,8 @@ export default function UserManagement() {
 
     if (editingId) {
       const payload = {
-        username: form.username,
-        email: form.email,
+        username: form.username.trim(),
+        email: form.email.trim().toLowerCase(),
         full_name: form.full_name,
         role: form.role,
         department: form.department,
