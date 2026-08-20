@@ -14,4 +14,5 @@ RUN mkdir -p uploads logs
 
 EXPOSE 5000
 
-CMD ["npm", "run", "dev"]
+# Production default. Local compose overrides with `npm run dev`.
+CMD ["npm", "start"]

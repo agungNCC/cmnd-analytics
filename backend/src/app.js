@@ -14,6 +14,9 @@ import adminRouter  from './routes/admin.js'
 
 const app = express()
 
+// Behind Nginx in production: trust one hop so rate-limit and req.ip work.
+app.set('trust proxy', 1)
+
 // Security & parsing
 app.use(helmet())
 app.use(cors({
