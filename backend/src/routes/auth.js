@@ -1,6 +1,6 @@
 import { Router }  from 'express'
 import jwt          from 'jsonwebtoken'
-import { findByEmail, findById, validatePassword } from '../services/userService.js'
+import { findByUsername, findById, validatePassword } from '../services/userService.js'
 import { logAudit } from '../services/audit.js'
 import { verifyToken } from '../middleware/auth.js'
 
@@ -22,14 +22,15 @@ const signToken = (user) =>
 
 // ==================== POST /api/auth/login ====================
 router.post('/login', async (req, res, next) => {
-  const { email, password } = req.body
+  const { username, login_name, password } = req.body
+  const loginName = username || login_name
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' })
+  if (!loginName || !password) {
+    return res.status(400).json({ error: 'Login name and password are required' })
   }
 
   try {
-    const user = await findByEmail(email)
+    const user = await findByUsername(loginName)
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }

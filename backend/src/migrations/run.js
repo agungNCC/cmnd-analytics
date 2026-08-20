@@ -19,6 +19,11 @@ const MIGRATIONS = [
   '001_init_schema.sql',
   '002_audit_logs.sql',
   '003_indexes.sql',
+  '004_export_jobs.sql',
+  '005_roles.sql',
+  '006_reference_files.sql',
+  '007_log_overall_completion.sql',
+  '008_export_settings.sql',
 ]
 
 async function runMigrations() {

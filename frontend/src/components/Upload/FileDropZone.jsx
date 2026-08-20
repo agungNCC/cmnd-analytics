@@ -1,8 +1,13 @@
+import { useState } from 'react'
+
 const ACCEPT = '.xlsx,.xls'
 
 export default function FileDropZone({ label, file, onChange, disabled }) {
+  const [isDragging, setIsDragging] = useState(false)
+
   const handleDrop = (event) => {
     event.preventDefault()
+    setIsDragging(false)
     if (disabled) return
     const dropped = event.dataTransfer.files?.[0]
     if (dropped) onChange(dropped)
@@ -13,14 +18,22 @@ export default function FileDropZone({ label, file, onChange, disabled }) {
     if (selected) onChange(selected)
   }
 
+  const highlighted = Boolean(file) || isDragging
+
   return (
     <label
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!disabled) setIsDragging(true)
+      }}
+      onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
       className={[
         'flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors',
-        disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-primary-700 hover:bg-primary-50',
-        file ? 'border-primary-700 bg-primary-50' : 'border-gray-300 bg-white',
+        disabled ? 'cursor-not-allowed opacity-60' : '',
+        highlighted
+          ? 'border-success bg-success-light'
+          : 'border-gray-300 bg-white hover:border-success hover:bg-success-light',
       ].join(' ')}
     >
       <input
@@ -33,7 +46,7 @@ export default function FileDropZone({ label, file, onChange, disabled }) {
       <p className="text-sm font-medium text-gray-900">{label}</p>
       <p className="mt-1 text-xs text-gray-500">Drag and drop or click to browse (.xlsx, .xls)</p>
       {file ? (
-        <p className="mt-3 rounded-md bg-white px-3 py-1 text-sm text-primary-700">{file.name}</p>
+        <p className="mt-3 rounded-md bg-white px-3 py-1 text-sm text-success-dark">{file.name}</p>
       ) : null}
     </label>
   )

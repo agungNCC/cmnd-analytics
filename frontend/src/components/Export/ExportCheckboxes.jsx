@@ -1,6 +1,12 @@
-import { SHEET_OPTIONS } from '../../hooks/useExport.js'
+import { EXPORT_SHEET_OPTIONS } from '../../hooks/useExport.js'
 
-export default function ExportCheckboxes({ selectedSheets, onChange, includeFormulas, onToggleFormulas }) {
+export default function ExportCheckboxes({
+  options = EXPORT_SHEET_OPTIONS,
+  selectedSheets,
+  onChange,
+  includeFormulas,
+  onToggleFormulas,
+}) {
   const toggleSheet = (sheetId) => {
     if (selectedSheets.includes(sheetId)) {
       onChange(selectedSheets.filter((id) => id !== sheetId))
@@ -14,7 +20,7 @@ export default function ExportCheckboxes({ selectedSheets, onChange, includeForm
       <div>
         <h3 className="text-sm font-semibold text-gray-900">Sheets to include</h3>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {SHEET_OPTIONS.map((sheet) => (
+          {options.map((sheet) => (
             <label
               key={sheet.id}
               className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50"

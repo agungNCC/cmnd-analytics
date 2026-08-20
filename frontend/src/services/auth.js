@@ -1,8 +1,8 @@
 import api from './api.js'
 import { clearToken, setToken } from './storage.js'
 
-export const login = async (email, password) => {
-  const { data } = await api.post('/api/auth/login', { email, password })
+export const login = async (username, password) => {
+  const { data } = await api.post('/api/auth/login', { username, password })
   setToken(data.token)
   return data.user
 }

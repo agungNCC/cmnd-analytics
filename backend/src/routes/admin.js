@@ -1,12 +1,25 @@
 import { Router } from 'express'
+import multer from 'multer'
+import os from 'os'
 import { query } from '../config/database.js'
 import { requireRole, verifyToken } from '../middleware/auth.js'
 import { createUser, findById, listUsers, updateUser } from '../services/userService.js'
 import { logAudit } from '../services/audit.js'
+import { saveReferenceFile, getReference } from '../services/referenceService.js'
+import { getExportSettings, saveExportSettings } from '../services/exportSettingsService.js'
+
+const refUpload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/\.(xlsx|xls)$/i.test(file.originalname)) cb(null, true)
+    else cb(new Error('Only .xlsx / .xls files are allowed'))
+  },
+})
 
 const router = Router()
 
-const VALID_ROLES = ['admin', 'uploader', 'viewer']
+const VALID_ROLES = ['admin', 'user']
 
 router.use(verifyToken)
 router.use(requireRole('admin'))
@@ -130,6 +143,105 @@ router.delete('/users/:id', async (req, res, next) => {
     })
 
     return res.json({ message: 'User deactivated successfully' })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ==================== REFERENCE FILES ====================
+
+// GET /api/admin/references
+router.get('/references', async (_req, res, next) => {
+  try {
+    const [mc, nip, template] = await Promise.all([
+      getReference('mc'),
+      getReference('mandatory_nip'),
+      getReference('template'),
+    ])
+    return res.json({ mc, mandatory_nip: nip, template })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/admin/references/:type  (type = 'mc' | 'mandatory_nip' | 'template')
+router.post(
+  '/references/:type',
+  refUpload.single('file'),
+  async (req, res, next) => {
+    const { type } = req.params
+    if (!['mc', 'mandatory_nip', 'template'].includes(type)) {
+      return res.status(400).json({ error: 'type must be mc, mandatory_nip, or template' })
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'file is required' })
+    }
+
+    try {
+      const result = await saveReferenceFile({
+        fileType:     type,
+        originalName: req.file.originalname,
+        tempPath:     req.file.path,
+        uploadedBy:   req.user.id,
+      })
+
+      await logAudit({
+        userId:       req.user.id,
+        username:     req.user.username,
+        action:       'reference_uploaded',
+        resourceType: 'reference_file',
+        resourceName: req.file.originalname,
+        status:       'success',
+        details:      { file_type: type, ...result },
+        ipAddress:    req.ip,
+        userAgent:    req.headers['user-agent'],
+      })
+
+      return res.json({
+        message:    `Reference file '${type}' updated successfully`,
+        ...result,
+      })
+    } catch (err) {
+      next(err)
+    }
+  },
+)
+
+// ==================== EXPORT SETTINGS ====================
+
+// GET /api/admin/export-settings
+router.get('/export-settings', async (_req, res, next) => {
+  try {
+    const settings = await getExportSettings()
+    return res.json(settings)
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PUT /api/admin/export-settings
+router.put('/export-settings', async (req, res, next) => {
+  try {
+    const { sheets, include_formulas: includeFormulas } = req.body || {}
+    const settings = await saveExportSettings({
+      sheets,
+      includeFormulas,
+      updatedBy: req.user.id,
+    })
+
+    await logAudit({
+      userId:       req.user.id,
+      username:     req.user.username,
+      action:       'export_settings_updated',
+      resourceType: 'export_settings',
+      resourceName: 'export_settings',
+      status:       'success',
+      details:      settings,
+      ipAddress:    req.ip,
+      userAgent:    req.headers['user-agent'],
+    })
+
+    return res.json(settings)
   } catch (err) {
     next(err)
   }

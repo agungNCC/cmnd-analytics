@@ -1,7 +1,6 @@
 export const ROLES = {
-  ADMIN:    'admin',
-  UPLOADER: 'uploader',
-  VIEWER:   'viewer',
+  ADMIN: 'admin',
+  USER:  'user',
 }
 
 export const UPLOAD_STATUS = {

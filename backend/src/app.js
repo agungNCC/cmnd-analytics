@@ -25,8 +25,14 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 app.use(requestLogger)
 
-// Rate limit on auth
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }))
+// Rate limit login saja — /me dan /logout tidak ikut dihitung
+app.use('/api/auth/login', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please wait a few minutes.' },
+}))
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))

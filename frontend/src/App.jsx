@@ -1,12 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { AuthProvider } from './hooks/useAuth.js'
+import { AuthProvider } from './hooks/useAuth.jsx'
 import ProtectedRoute from './components/Layout/ProtectedRoute.jsx'
 import AppLayout from './components/Layout/AppLayout.jsx'
 import Login     from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Upload    from './pages/Upload.jsx'
-import Export    from './pages/Export.jsx'
 import Admin     from './pages/Admin.jsx'
 
 export default function App() {
@@ -20,11 +19,10 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/export" element={<Export />} />
             </Route>
           </Route>
 
-          <Route element={<ProtectedRoute requiredRoles={['admin', 'uploader']} />}>
+          <Route element={<ProtectedRoute requiredRoles={['admin', 'user']} />}>
             <Route element={<AppLayout />}>
               <Route path="/upload" element={<Upload />} />
             </Route>

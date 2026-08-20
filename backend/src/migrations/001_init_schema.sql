@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   full_name     VARCHAR(255),
-  role          VARCHAR(50)  NOT NULL DEFAULT 'viewer',  -- admin | uploader | viewer
+  role          VARCHAR(50)  NOT NULL DEFAULT 'user',    -- admin | user
   department    VARCHAR(255),
   is_active     BOOLEAN      NOT NULL DEFAULT true,
   created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS raw_log_plus (
   course_name           VARCHAR(255),
   completion_status     VARCHAR(50),
   completion_percentage DECIMAL(5,2),
+  overall_completion    DECIMAL(5,2),
   completion_date       TIMESTAMP,
   score                 INT,
   created_at            TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP

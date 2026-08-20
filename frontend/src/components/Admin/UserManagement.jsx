@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import api from '../../services/api.js'
-import { useAuth } from '../../hooks/useAuth.js'
+import { useAuth } from '../../hooks/useAuth.jsx'
 
 const EMPTY_FORM = {
   username: '',
   email: '',
   password: '',
   full_name: '',
-  role: 'viewer',
+  role: 'user',
   department: '',
 }
 
@@ -129,8 +129,7 @@ export default function UserManagement() {
             onChange={(e) => setForm({ ...form, role: e.target.value })}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           >
-            <option value="viewer">Viewer</option>
-            <option value="uploader">Uploader</option>
+            <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
           <button
@@ -147,7 +146,7 @@ export default function UserManagement() {
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              {['Name', 'Email', 'Role', 'Department', 'Status', 'Actions'].map((label) => (
+              {['Name', 'Login name', 'Email', 'Role', 'Department', 'Status', 'Actions'].map((label) => (
                 <th key={label} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   {label}
                 </th>
@@ -158,6 +157,7 @@ export default function UserManagement() {
             {users.map((user) => (
               <tr key={user.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 text-gray-700">{user.full_name || user.username}</td>
+                <td className="px-3 py-2 text-gray-700">{user.username}</td>
                 <td className="px-3 py-2 text-gray-700">{user.email}</td>
                 <td className="px-3 py-2">
                   <select
@@ -166,8 +166,7 @@ export default function UserManagement() {
                     onChange={(e) => updateMutation.mutate({ id: user.id, payload: { role: e.target.value } })}
                     className="rounded-md border border-gray-300 px-2 py-1 text-sm"
                   >
-                    <option value="viewer">Viewer</option>
-                    <option value="uploader">Uploader</option>
+                    <option value="user">User</option>
                     <option value="admin">Admin</option>
                   </select>
                 </td>

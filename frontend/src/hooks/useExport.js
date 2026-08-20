@@ -1,36 +1,49 @@
 import { useState } from 'react'
 import api from '../services/api.js'
 
-export const SHEET_OPTIONS = [
-  { id: 'summary_all', label: 'Summary All' },
+export const EXPORT_SHEET_OPTIONS = [
   { id: 'mandatory_2026', label: 'Mandatory 2026' },
   { id: 'log_plus', label: 'LOG+' },
   { id: 'vr_learning', label: 'VR Learning' },
 ]
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 export const useExport = () => {
   const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState(null)
+  const [progress, setProgress] = useState(0)
 
-  const exportXlsx = async ({ sheets, includeFormulas, filters }) => {
+  const exportXlsx = async () => {
     setIsExporting(true)
     setError(null)
+    setProgress(0)
 
     try {
-      const response = await api.post(
-        '/api/export/xlsx',
-        {
-          sheets,
-          include_formulas: includeFormulas,
-          filters,
-        },
-        { responseType: 'blob' },
-      )
+      const { data: started } = await api.post('/api/export/xlsx')
 
-      const disposition = response.headers['content-disposition'] || ''
-      const match = disposition.match(/filename="(.+)"/)
-      const filename = match?.[1] || `CMND_Analytics_${new Date().toISOString().slice(0, 10)}.xlsx`
+      const exportId = started.export_id
+      let status = started.status
+      let attempts = 0
 
+      while (status === 'processing') {
+        if (++attempts > 120) {
+          throw new Error('Export timed out')
+        }
+        await sleep(1000)
+        const { data } = await api.get(`/api/export/status/${exportId}`)
+        status = data.status
+        setProgress(data.progress ?? 0)
+        if (status === 'failed') {
+          throw new Error(data.error_message || 'Export failed')
+        }
+      }
+
+      const response = await api.get(`/api/export/download/${exportId}`, {
+        responseType: 'blob',
+      })
+
+      const filename = started.filename || `CMND_Analytics_${new Date().toISOString().slice(0, 10)}.xlsx`
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
@@ -40,11 +53,10 @@ export const useExport = () => {
       link.remove()
       window.URL.revokeObjectURL(url)
 
+      setProgress(100)
       return filename
     } catch (err) {
-      const message = err.response?.data instanceof Blob
-        ? 'Export failed'
-        : err.response?.data?.error || 'Export failed'
+      const message = err.response?.data?.error || err.message || 'Export failed'
       setError(message)
       throw new Error(message)
     } finally {
@@ -52,5 +64,5 @@ export const useExport = () => {
     }
   }
 
-  return { exportXlsx, isExporting, error }
+  return { exportXlsx, isExporting, error, progress }
 }

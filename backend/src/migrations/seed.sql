@@ -1,36 +1,39 @@
 -- ============================================================
 -- seed.sql
--- 3 user default untuk development & testing
--- Password: password123
+-- Default users
+-- Admin: adminncc / Welcome1!
+-- User:  user01 / Welcome1!
 -- ============================================================
 
 INSERT INTO users (username, email, password_hash, full_name, role, department, is_active)
 VALUES
   (
-    'admin',
-    'admin@cimb.local',
-    crypt('password123', gen_salt('bf', 10)),
+    'adminncc',
+    'adminncc@cimb.local',
+    crypt('Welcome1!', gen_salt('bf', 10)),
     'Administrator',
     'admin',
     'IT Department',
     true
   ),
   (
-    'uploader',
-    'uploader@cimb.local',
-    crypt('password123', gen_salt('bf', 10)),
-    'Data Uploader',
-    'uploader',
+    'user01',
+    'user01@cimb.local',
+    crypt('Welcome1!', gen_salt('bf', 10)),
+    'User',
+    'user',
     'Learning & Development',
     true
-  ),
-  (
-    'viewer',
-    'viewer@cimb.local',
-    crypt('password123', gen_salt('bf', 10)),
-    'Dashboard Viewer',
-    'viewer',
-    'HR Department',
-    true
   )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  department = EXCLUDED.department,
+  is_active = true,
+  updated_at = CURRENT_TIMESTAMP;
+
+UPDATE users
+SET is_active = false
+WHERE username NOT IN ('adminncc', 'user01');

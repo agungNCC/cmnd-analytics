@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth.js'
+import { useAuth } from '../../hooks/useAuth.jsx'
 
 const linkClass = ({ isActive }) =>
   [
@@ -14,8 +14,7 @@ export default function Sidebar() {
 
   const links = [
     { to: '/', label: 'Dashboard' },
-    { to: '/upload', label: 'Upload', roles: ['admin', 'uploader'] },
-    { to: '/export', label: 'Export' },
+    { to: '/upload', label: 'Upload', roles: ['admin', 'user'] },
     { to: '/admin', label: 'Admin', roles: ['admin'] },
   ].filter((link) => !link.roles || link.roles.includes(user?.role))
 

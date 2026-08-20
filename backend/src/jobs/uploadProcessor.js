@@ -4,50 +4,67 @@ import { parseLogPlus, parseVrLearning } from '../services/fileParser.js'
 import { calculateMandatory2026, calculateSummaryAll } from '../services/etl.js'
 import { logAudit } from '../services/audit.js'
 
-const insertLogPlusRows = async (client, uploadId, rows) => {
-  for (const row of rows) {
-    await client.query(
-      `INSERT INTO raw_log_plus (
-        upload_id, employee_id, employee_name, directorate, sub_directorate,
-        course_name, completion_status, completion_percentage, completion_date, score
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [
-        uploadId,
-        row.employee_id ?? row.nik ?? null,
-        row.employee_name ?? row.nama ?? null,
-        row.directorate ?? null,
-        row.sub_directorate ?? null,
-        row.course_name ?? row.course ?? null,
-        row.completion_status ?? null,
-        row.completion_percentage ?? row.progress ?? null,
-        row.completion_date ?? null,
-        row.score ?? null,
-      ],
-    )
+const CHUNK_SIZE = 500
+
+const insertChunk = async (client, sql, paramsPerRow, rows) => {
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE)
+    const values = []
+    const placeholders = chunk.map((row, index) => {
+      const offset = index * paramsPerRow.length
+      values.push(...paramsPerRow.map((pick) => pick(row)))
+      return `(${paramsPerRow.map((_, col) => `$${offset + col + 1}`).join(',')})`
+    })
+    await client.query(`${sql} VALUES ${placeholders.join(',')}`, values)
   }
 }
 
+const insertLogPlusRows = async (client, uploadId, rows) => {
+  await insertChunk(
+    client,
+    `INSERT INTO raw_log_plus (
+      upload_id, employee_id, employee_name, directorate, sub_directorate,
+      course_name, completion_status, completion_percentage, overall_completion,
+      completion_date, score
+    )`,
+    [
+      () => uploadId,
+      (row) => row.employee_id ?? null,
+      (row) => row.employee_name ?? null,
+      (row) => row.directorate ?? null,
+      (row) => row.sub_directorate ?? null,
+      (row) => row.course_name ?? null,
+      (row) => row.completion_status ?? null,
+      (row) => row.completion_percentage ?? null,
+      (row) => row.overall_completion ?? null,
+      (row) => row.completion_date ?? null,
+      (row) => row.score ?? null,
+    ],
+    rows,
+  )
+}
+
 const insertVrLearningRows = async (client, uploadId, rows) => {
-  for (const row of rows) {
-    await client.query(
-      `INSERT INTO raw_vr_learning (
-        upload_id, employee_id, employee_name, directorate, sub_directorate,
-        region, branch, forward_30_score, completion_time, completion_status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [
-        uploadId,
-        row.employee_id ?? row.nik ?? null,
-        row.employee_name ?? row.nama ?? null,
-        row.directorate ?? null,
-        row.sub_directorate ?? null,
-        row.region ?? null,
-        row.branch ?? null,
-        row.forward_30_score ?? row.score ?? null,
-        row.completion_time ?? null,
-        row.completion_status ?? null,
-      ],
-    )
-  }
+  await insertChunk(
+    client,
+    `INSERT INTO raw_vr_learning (
+      upload_id, employee_id, employee_name, directorate, sub_directorate,
+      region, branch, forward_30_score, completion_time, completion_status
+    )`,
+    [
+      () => uploadId,
+      (row) => row.employee_id ?? null,
+      (row) => row.employee_name ?? null,
+      (row) => row.directorate ?? null,
+      (row) => row.sub_directorate ?? null,
+      (row) => row.region ?? null,
+      (row) => row.branch ?? null,
+      (row) => row.forward_30_score ?? row.score ?? null,
+      (row) => row.completion_time ?? null,
+      (row) => row.completion_status ?? null,
+    ],
+    rows,
+  )
 }
 
 export const processUploadJob = async ({
@@ -64,11 +81,19 @@ export const processUploadJob = async ({
   let transactionStarted = false
 
   try {
+    await query(
+      `UPDATE upload_history SET processing_status = 'processing' WHERE id = $1`,
+      [uploadId],
+    )
+
     const logPlusRows = parseLogPlus(logPlusPath)
     const vrLearningRows = parseVrLearning(vrLearningPath)
 
     await client.query('BEGIN')
     transactionStarted = true
+    // Each successful upload is the new authoritative LOG+ and VR dataset.
+    await client.query('DELETE FROM raw_log_plus')
+    await client.query('DELETE FROM raw_vr_learning')
     await insertLogPlusRows(client, uploadId, logPlusRows)
     await insertVrLearningRows(client, uploadId, vrLearningRows)
     await client.query(

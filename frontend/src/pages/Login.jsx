@@ -1,19 +1,13 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth.js'
-
-const DEMO_ACCOUNTS = [
-  { label: 'Admin', email: 'admin@cimb.local', password: 'password123' },
-  { label: 'Uploader', email: 'uploader@cimb.local', password: 'password123' },
-  { label: 'Viewer', email: 'viewer@cimb.local', password: 'password123' },
-]
+import { useAuth } from '../hooks/useAuth.jsx'
 
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, login, loading } = useAuth()
-  const [email, setEmail] = useState('admin@cimb.local')
-  const [password, setPassword] = useState('password123')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -26,18 +20,22 @@ export default function Login() {
     event.preventDefault()
     setError('')
 
-    if (!email.trim() || !password.trim()) {
-      setError('Email and password are required')
+    if (!username.trim() || !password.trim()) {
+      setError('Login name and password are required')
       return
     }
 
     setSubmitting(true)
 
     try {
-      await login(email.trim(), password)
+      await login(username.trim(), password)
       navigate(location.state?.from?.pathname || '/')
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed')
+      setError(
+        err.response?.data?.error
+        || err.response?.data?.message
+        || 'Login failed',
+      )
     } finally {
       setSubmitting(false)
     }
@@ -49,41 +47,25 @@ export default function Login() {
         onSubmit={handleSubmit}
         className="w-full max-w-md rounded-xl bg-white p-8 shadow-sm border border-gray-200"
       >
-        <h1 className="text-2xl font-semibold text-gray-900">CMND Analytics</h1>
-        <p className="mt-2 text-sm text-gray-500">
+        <div className="flex justify-center">
+          <img
+            src="/bawana-logo.png"
+            alt="BAWANA"
+            className="h-12 w-auto object-contain"
+          />
+        </div>
+        <p className="mt-4 text-center text-sm text-gray-500">
           Sign in to access the Mandatory LOG+ and VR Learning dashboard.
         </p>
 
-        <div className="mt-4 rounded-lg border border-primary-100 bg-primary-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">
-            Demo Accounts
-          </p>
-          <div className="mt-2 space-y-2 text-sm text-gray-700">
-            {DEMO_ACCOUNTS.map((account) => (
-              <button
-                key={account.label}
-                type="button"
-                onClick={() => {
-                  setEmail(account.email)
-                  setPassword(account.password)
-                }}
-                className="flex w-full items-center justify-between rounded-md border border-primary-100 bg-white px-3 py-2 text-left hover:bg-primary-50"
-              >
-                <span className="font-medium">{account.label}</span>
-                <span className="text-xs text-gray-500">{account.email}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-6 space-y-4">
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-700">Email</span>
+            <span className="mb-1 block text-sm font-medium text-gray-700">Login name</span>
             <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-primary-700"
             />
           </label>

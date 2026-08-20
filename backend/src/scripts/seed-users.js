@@ -1,11 +1,8 @@
 import 'dotenv/config'
-import { readFile } from 'fs/promises'
-import { fileURLToPath } from 'url'
-import path from 'path'
+import bcrypt from 'bcryptjs'
 import pg from 'pg'
 
 const { Pool } = pg
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const pool = new Pool({
   host:     process.env.DB_HOST     || 'localhost',
@@ -15,23 +12,58 @@ const pool = new Pool({
   database: process.env.DB_NAME     || 'vr_learning_db',
 })
 
+const DEFAULT_USERS = [
+  {
+    username: 'adminncc',
+    email: 'adminncc@cimb.local',
+    password: 'Welcome1!',
+    fullName: 'Administrator',
+    role: 'admin',
+    department: 'IT Department',
+  },
+  {
+    username: 'user01',
+    email: 'user01@cimb.local',
+    password: 'Welcome1!',
+    fullName: 'User',
+    role: 'user',
+    department: 'Learning & Development',
+  },
+]
+
 async function seedUsers() {
   const client = await pool.connect()
   try {
-    const seedPath = path.join(__dirname, '../migrations/seed.sql')
-    const sql = await readFile(seedPath, 'utf8')
+    for (const user of DEFAULT_USERS) {
+      const hash = await bcrypt.hash(user.password, 10)
+      await client.query(
+        `INSERT INTO users (username, email, password_hash, full_name, role, department, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, true)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           password_hash = EXCLUDED.password_hash,
+           full_name = EXCLUDED.full_name,
+           role = EXCLUDED.role,
+           department = EXCLUDED.department,
+           is_active = true,
+           updated_at = CURRENT_TIMESTAMP`,
+        [user.username, user.email, hash, user.fullName, user.role, user.department],
+      )
+    }
 
-    await client.query(sql)
+    await client.query(
+      `UPDATE users SET is_active = false WHERE username NOT IN ('adminncc', 'user01')`,
+    )
+
     console.log('✅  Seed users complete:')
-    console.log('     admin@cimb.local    / password123  [admin]')
-    console.log('     uploader@cimb.local / password123  [uploader]')
-    console.log('     viewer@cimb.local   / password123  [viewer]')
+    console.log('     adminncc / Welcome1!  [admin]')
+    console.log('     user01   / Welcome1!  [user]')
 
     const { rows } = await client.query(
-      'SELECT email, role, is_active FROM users ORDER BY role',
+      'SELECT username, role, is_active FROM users ORDER BY role, username',
     )
     console.log('\nCurrent users in DB:')
-    rows.forEach((r) => console.log(`  • ${r.email} (${r.role}) active=${r.is_active}`))
+    rows.forEach((r) => console.log(`  • ${r.username} (${r.role}) active=${r.is_active}`))
   } finally {
     client.release()
     await pool.end()

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth.js'
+import { useAuth } from '../../hooks/useAuth.jsx'
 
 export default function Navbar() {
   const navigate = useNavigate()
@@ -12,19 +12,17 @@ export default function Navbar() {
 
   return (
     <header className="h-16 border-b border-gray-200 bg-white px-6 flex items-center justify-between">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">CMND Analytics</h1>
-        <p className="text-sm text-gray-500">Mandatory LOG+ & VR Learning Dashboard</p>
-      </div>
+      <img
+        src="/bawana-logo.png"
+        alt="BAWANA"
+        className="h-10 w-auto object-contain"
+      />
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <div className="text-right">
-          <p className="text-sm font-medium text-gray-900">{user?.full_name || user?.username}</p>
-          <p className="text-xs text-gray-500">{user?.email}</p>
+          <p className="text-sm font-medium text-gray-900">{user?.username}</p>
         </div>
-        <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-semibold uppercase text-primary-700">
-          {user?.role || 'guest'}
-        </span>
+
         <button
           type="button"
           onClick={handleLogout}

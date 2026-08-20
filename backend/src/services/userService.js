@@ -2,12 +2,12 @@ import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
 
 /**
- * Cari user berdasarkan email
+ * Cari user berdasarkan login name (username)
  */
-export const findByEmail = async (email) => {
+export const findByUsername = async (username) => {
   const { rows } = await query(
-    'SELECT * FROM users WHERE email = $1 AND is_active = true',
-    [email.toLowerCase().trim()],
+    'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND is_active = true',
+    [String(username).trim()],
   )
   return rows[0] || null
 }
@@ -39,7 +39,7 @@ export const createUser = async ({ username, email, password, fullName, role, de
     `INSERT INTO users (username, email, password_hash, full_name, role, department)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id, username, email, full_name, role, department, is_active, created_at`,
-    [username, email.toLowerCase().trim(), hash, fullName || null, role || 'viewer', department || null],
+    [username, email.toLowerCase().trim(), hash, fullName || null, role || 'user', department || null],
   )
   return rows[0]
 }

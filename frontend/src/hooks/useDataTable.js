@@ -67,13 +67,3 @@ export const useDataTable = (endpoint, { defaultLimit = 100, initialFilters = {}
     resetFilters,
   }
 }
-
-export const useSummaryAll = () => {
-  return useQuery({
-    queryKey: ['summary-all'],
-    queryFn: async () => {
-      const { data } = await api.get('/api/data/summary-all')
-      return data
-    },
-  })
-}

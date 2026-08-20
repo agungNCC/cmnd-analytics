@@ -39,8 +39,7 @@ export const useFileUpload = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['upload-history'] })
-      queryClient.invalidateQueries({ queryKey: ['/api/data/summary-all'] })
-      queryClient.invalidateQueries({ queryKey: ['summary-all'] })
+      queryClient.invalidateQueries({ queryKey: ['/api/data/mandatory-2026'] })
       queryClient.invalidateQueries({ queryKey: ['/api/data/mandatory-2026'] })
       queryClient.invalidateQueries({ queryKey: ['/api/data/log-plus'] })
       queryClient.invalidateQueries({ queryKey: ['/api/data/vr-learning'] })

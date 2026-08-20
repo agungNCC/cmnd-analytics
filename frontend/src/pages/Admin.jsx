@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import UserManagement from '../components/Admin/UserManagement.jsx'
 import AuditLogViewer from '../components/Admin/AuditLogViewer.jsx'
+import ReferenceFilesManager from '../components/Admin/ReferenceFilesManager.jsx'
+import ExportSettingsManager from '../components/Admin/ExportSettingsManager.jsx'
 
 const TABS = [
   { id: 'users', label: 'User Management' },
+  { id: 'references', label: 'Reference Files' },
+  { id: 'export', label: 'Export Settings' },
   { id: 'logs', label: 'Audit Logs' },
 ]
 
@@ -15,7 +19,7 @@ export default function Admin() {
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Admin</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Manage users and review system activity logs.
+          Manage users, reference files, export settings, and review system activity logs.
         </p>
       </div>
 
@@ -40,7 +44,10 @@ export default function Admin() {
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        {activeTab === 'users' ? <UserManagement /> : <AuditLogViewer />}
+        {activeTab === 'users' && <UserManagement />}
+        {activeTab === 'references' && <ReferenceFilesManager />}
+        {activeTab === 'export' && <ExportSettingsManager />}
+        {activeTab === 'logs' && <AuditLogViewer />}
       </div>
     </div>
   )

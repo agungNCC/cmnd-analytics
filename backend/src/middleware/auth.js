@@ -25,7 +25,7 @@ export const verifyToken = (req, res, next) => {
  * Pastikan req.user.role ada di daftar role yang diizinkan.
  * Gunakan setelah verifyToken.
  *
- * Contoh: requireRole('admin', 'uploader')
+ * Contoh: requireRole('admin', 'user')
  */
 export const requireRole = (...roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {

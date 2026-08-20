@@ -42,7 +42,7 @@ export default function Upload() {
 
       setStatus('success')
       setProgress(100)
-      toast.success(`Upload complete: ${result.log_plus_rows} LOG+ rows, ${result.vr_learning_rows} VR rows`)
+      toast.success(result.message || 'Files received, processing in background')
       setLogPlusFile(null)
       setVrLearningFile(null)
     } catch (err) {
