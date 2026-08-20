@@ -6,6 +6,7 @@ import {
   buildMcLookup,
   getExportTemplatePath,
   getMandatoryNipList,
+  getMcReference,
 } from './referenceService.js'
 
 const TEMPLATE_DIRS = [
@@ -390,44 +391,122 @@ const buildVrRows = (sheetXml, employees) => {
     })
 }
 
-const patchMandatoryNips = (xml, nips) => {
-  const existingLastRow = Number(xml.match(/<dimension ref="[^"]*?(\d+)"\/>/)?.[1] || 0)
-  if (nips.length + 1 > existingLastRow) {
-    throw new Error(
-      `Mandatory NIP count (${nips.length}) exceeds sample capacity (${existingLastRow - 1})`,
-    )
-  }
+const quoteSheetName = (name) => `'${String(name).replaceAll("'", "''")}'`
 
+const formulaCell = (ref, formula, styleId, asString = false) => {
+  const style = styleAttribute(styleId)
+  const type = asString ? ' t="str"' : ''
+  const escaped = String(formula)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+  return `<c r="${ref}"${style}${type}><f>${escaped}</f></c>`
+}
+
+const buildMandatoryRow = (rowNumber, nip, ranges) => {
+  const style = '26'
+  const b = `B${rowNumber}`
+  const mcRange = `${quoteSheetName(ranges.mcSheet)}!$B$4:$AO$${ranges.mcLastRow}`
+  const logRange = `'LOG+'!$B$3:$AF$${ranges.logLastRow}`
+  const vrRange = `'VR Learning'!$A$1:$K$${ranges.vrLastRow}`
+  const nipValue = /^\d+$/.test(nip) ? Number(nip) : nip
+
+  const cells = [
+    valueCell(`A${rowNumber}`, rowNumber - 1, style),
+    valueCell(`B${rowNumber}`, nipValue, style, { forceText: typeof nipValue !== 'number' }),
+    formulaCell(`C${rowNumber}`, `VLOOKUP(${b},${mcRange},2,FALSE)`, style, true),
+    formulaCell(`D${rowNumber}`, `VLOOKUP(${b},${mcRange},5,FALSE)`, style, true),
+    formulaCell(`E${rowNumber}`, `VLOOKUP(${b},${mcRange},6,FALSE)`, style, true),
+    formulaCell(`F${rowNumber}`, `VLOOKUP(${b},${mcRange},7,FALSE)`, style, true),
+    formulaCell(`G${rowNumber}`, `VLOOKUP(${b},${mcRange},8,FALSE)`, style, true),
+    formulaCell(`H${rowNumber}`, `VLOOKUP(${b},${mcRange},10,FALSE)`, style, true),
+    formulaCell(`I${rowNumber}`, `VLOOKUP(${b},${mcRange},10,FALSE)`, style, true),
+    formulaCell(`J${rowNumber}`, `VLOOKUP(${b},${mcRange},23,FALSE)`, style, true),
+    formulaCell(`K${rowNumber}`, `VLOOKUP(${b},${mcRange},24,FALSE)`, style),
+    formulaCell(`L${rowNumber}`, `VLOOKUP(${b},${mcRange},25,FALSE)`, style, true),
+    formulaCell(`M${rowNumber}`, `VLOOKUP(${b},${mcRange},28,FALSE)`, '39'),
+    formulaCell(`N${rowNumber}`, `VLOOKUP(${b},${mcRange},35,FALSE)`, style),
+    formulaCell(`O${rowNumber}`, `VLOOKUP(${b},${mcRange},20,FALSE)`, '27'),
+    formulaCell(`P${rowNumber}`, `VLOOKUP(${b},${mcRange},21,FALSE)`, '27'),
+    formulaCell(`Q${rowNumber}`, `VLOOKUP(${b},${mcRange},18,FALSE)`, '27'),
+    formulaCell(`R${rowNumber}`, `IF(S${rowNumber}=100%,"Completed","Incompleted")`, '28', true),
+    formulaCell(`S${rowNumber}`, `VLOOKUP(${b},${logRange},8,FALSE)`, '28'),
+    formulaCell(`T${rowNumber}`, `VLOOKUP(${b},${vrRange},10,FALSE)`, '28', true),
+    formulaCell(`U${rowNumber}`, `VLOOKUP(${b},${vrRange},11,FALSE)`, '28'),
+    formulaCell(`V${rowNumber}`, `IF(W${rowNumber}=100%,"Completed","Incompleted")`, '28', true),
+    formulaCell(`W${rowNumber}`, `(S${rowNumber}+U${rowNumber})/2`, '37'),
+  ]
+
+  return `<row r="${rowNumber}" spans="1:23">${cells.join('')}</row>`
+}
+
+const patchMandatoryNips = (xml, nips, ranges) => {
   const sheetData = xml.match(/<sheetData>(.*?)<\/sheetData>/)
   if (!sheetData) throw new Error('Mandatory worksheet sheetData not found')
 
-  const replaceRowCell = (rowXml, ref, value) => {
-    const regex = new RegExp(
-      `(?:<c r="${ref}"[^>]*?\\/>|<c r="${ref}"[^>]*>.*?<\\/c>)`,
-    )
-    const existing = rowXml.match(regex)?.[0]
-    if (!existing) return rowXml
-    const styleId = existing.match(/\bs="(\d+)"/)?.[1]
-    return rowXml.replace(regex, valueCell(ref, value, styleId))
-  }
+  const headerMatch = sheetData[1].match(/<row\b[^>]*\br="1"[^>]*(?:\/>|>.*?<\/row>)/)
+  if (!headerMatch) throw new Error('Mandatory worksheet header row not found')
 
-  const rows = sheetData[1].replace(
-    /<row\b[^>]*\br="(\d+)"[^>]*(?:\/>|>.*?<\/row>)/g,
-    (rowXml, rowNumberText) => {
-      const rowNumber = Number(rowNumberText)
-      if (rowNumber < 2) return rowXml
-      const nip = nips[rowNumber - 2]
-      let patched = replaceRowCell(rowXml, `A${rowNumber}`, nip ? rowNumber - 1 : '')
-      patched = replaceRowCell(
-        patched,
-        `B${rowNumber}`,
-        nip && /^\d+$/.test(nip) ? Number(nip) : (nip || ''),
+  const dataRows = nips.map((nip, index) => buildMandatoryRow(index + 2, nip, ranges))
+  const lastRow = Math.max(1, nips.length + 1)
+  const dimension = `A1:W${lastRow}`
+
+  return xml
+    .replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="${dimension}"/>`)
+    .replace(/<sheetData>.*?<\/sheetData>/, `<sheetData>${headerMatch[0]}${dataRows.join('')}</sheetData>`)
+    .replace(/<autoFilter ref="[^"]+"/, `<autoFilter ref="${dimension}"`)
+}
+
+const buildMcSheetXml = (rows) => {
+  const maxCols = rows.reduce((max, row) => Math.max(max, row?.length || 0), 1)
+  const lastRow = Math.max(rows.length, 1)
+  const dimension = `A1:${columnName(maxCols - 1)}${lastRow}`
+  const rowXml = rows.map((row, index) => {
+    const rowNumber = index + 1
+    const cells = (row || []).map((value, colIndex) => {
+      if (value === null || value === undefined || value === '') return ''
+      const numeric = typeof value === 'number'
+        ? value
+        : (String(value).trim() !== '' && Number.isFinite(Number(value)) && !/^0\d+/.test(String(value).trim())
+          ? Number(value)
+          : value)
+      return valueCell(
+        `${columnName(colIndex)}${rowNumber}`,
+        Number.isFinite(numeric) && typeof numeric === 'number' ? numeric : value,
+        null,
+        { forceText: typeof numeric !== 'number' },
       )
-      return patched
-    },
+    }).join('')
+    return `<row r="${rowNumber}" spans="1:${maxCols}">${cells}</row>`
+  }).join('')
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<dimension ref="${dimension}"/>` +
+    `<sheetData>${rowXml}</sheetData>` +
+    `</worksheet>`
+  )
+}
+
+const attachMcSheet = (zip, workbookXml, workbookRels, contentTypes, sheetName, rows) => {
+  zip.file('xl/worksheets/sheet5.xml', buildMcSheetXml(rows))
+
+  const safeName = xmlEscape(sheetName).slice(0, 31)
+  const nextWorkbook = workbookXml.replace(
+    '</sheets>',
+    `<sheet name="${safeName}" sheetId="21" r:id="rId10"/></sheets>`,
+  )
+  const nextRels = workbookRels.replace(
+    '</Relationships>',
+    `<Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/></Relationships>`,
+  )
+  const nextTypes = contentTypes.replace(
+    '</Types>',
+    `<Override PartName="/xl/worksheets/sheet5.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`,
   )
 
-  return xml.replace(/<sheetData>.*?<\/sheetData>/, `<sheetData>${rows}</sheetData>`)
+  return { workbookXml: nextWorkbook, workbookRels: nextRels, contentTypes: nextTypes }
 }
 
 const buildSummary = (nips, mcMap, logMap, vrMap) => {
@@ -516,11 +595,12 @@ const patchSummary = (xml, summary) => {
 }
 
 export const buildSampleBasedExportBuffer = async () => {
-  const [nips, mcMap, logMap, vrMap] = await Promise.all([
+  const [nips, mcMap, logMap, vrMap, mcRef] = await Promise.all([
     getMandatoryNipList(),
     buildMcLookup(),
     fetchLogData(),
     fetchVrData(),
+    getMcReference(),
   ])
 
   const templatePath = await getExportTemplatePath()
@@ -533,12 +613,14 @@ export const buildSampleBasedExportBuffer = async () => {
     logXml,
     vrXml,
     sharedStringsXml,
+    workbookXml,
   ] = await Promise.all([
     zip.file('xl/worksheets/sheet1.xml').async('string'),
     zip.file('xl/worksheets/sheet2.xml').async('string'),
     zip.file('xl/worksheets/sheet3.xml').async('string'),
     zip.file('xl/worksheets/sheet4.xml').async('string'),
     zip.file('xl/sharedStrings.xml').async('string'),
+    zip.file('xl/workbook.xml').async('string'),
   ])
 
   const logDefaults = parseLogDefaults(logXml, sharedStringsXml)
@@ -556,29 +638,44 @@ export const buildSampleBasedExportBuffer = async () => {
   const summary = buildSummary(nips, mcMap, logMap, vrMap)
   const logRows = buildLogRows(logXml, logMap)
   const vrRows = buildVrRows(vrXml, vrMap)
+  const ranges = {
+    mcSheet: mcRef.sheetName,
+    mcLastRow: Math.max(4, mcRef.rows.length),
+    logLastRow: Math.max(3, 3 + logRows.length),
+    vrLastRow: Math.max(2, 2 + vrRows.length),
+  }
 
   zip.file('xl/worksheets/sheet1.xml', patchSummary(summaryXml, summary))
-  zip.file('xl/worksheets/sheet2.xml', patchMandatoryNips(mandatoryXml, nips))
+  zip.file('xl/worksheets/sheet2.xml', patchMandatoryNips(mandatoryXml, nips, ranges))
   zip.file('xl/worksheets/sheet3.xml', replaceDataRows(logXml, 3, logRows, 34))
   zip.file('xl/worksheets/sheet4.xml', replaceDataRows(vrXml, 2, vrRows, 11))
 
-  // Formula cells changed, so the template calculation chain is no longer valid.
-  // Removing all three package references lets Excel rebuild it without recovery.
   const [workbookRels, contentTypes] = await Promise.all([
     zip.file('xl/_rels/workbook.xml.rels').async('string'),
     zip.file('[Content_Types].xml').async('string'),
   ])
+
+  const attached = attachMcSheet(
+    zip,
+    workbookXml,
+    workbookRels,
+    contentTypes,
+    mcRef.sheetName,
+    mcRef.rows,
+  )
+
   zip.remove('xl/calcChain.xml')
+  zip.file('xl/workbook.xml', attached.workbookXml)
   zip.file(
     'xl/_rels/workbook.xml.rels',
-    workbookRels.replace(
+    attached.workbookRels.replace(
       /<Relationship\b(?=[^>]*Type="[^"]*\/calcChain")[^>]*\/>/,
       '',
     ),
   )
   zip.file(
     '[Content_Types].xml',
-    contentTypes.replace(
+    attached.contentTypes.replace(
       /<Override\b(?=[^>]*PartName="\/xl\/calcChain\.xml")[^>]*\/>/,
       '',
     ),

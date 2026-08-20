@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { v4 as uuid } from 'uuid'
 import { verifyToken } from '../middleware/auth.js'
 import { query } from '../config/database.js'
+import { exportQueue } from '../jobs/queues.js'
 import { getExportSettings, resolveExportSheets } from '../services/exportSettingsService.js'
 
 const router = Router()
