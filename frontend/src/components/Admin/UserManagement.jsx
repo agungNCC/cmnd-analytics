@@ -13,9 +13,12 @@ const EMPTY_FORM = {
   department: '',
 }
 
+const inputClass = 'rounded-md border border-gray-300 px-3 py-2 text-sm'
+
 export default function UserManagement() {
   const { user: currentUser } = useAuth()
   const queryClient = useQueryClient()
+  const [editingId, setEditingId] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
 
@@ -35,8 +38,7 @@ export default function UserManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       toast.success('User created')
-      setForm(EMPTY_FORM)
-      setShowForm(false)
+      closeForm()
     },
     onError: (err) => toast.error(err.response?.data?.error || 'Failed to create user'),
   })
@@ -49,6 +51,7 @@ export default function UserManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       toast.success('User updated')
+      closeForm()
     },
     onError: (err) => toast.error(err.response?.data?.error || 'Failed to update user'),
   })
@@ -65,14 +68,59 @@ export default function UserManagement() {
     onError: (err) => toast.error(err.response?.data?.error || 'Failed to deactivate user'),
   })
 
-  const handleCreate = (event) => {
+  const closeForm = () => {
+    setShowForm(false)
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+  }
+
+  const openCreate = () => {
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+    setShowForm(true)
+  }
+
+  const openEdit = (user) => {
+    setEditingId(user.id)
+    setForm({
+      username: user.username || '',
+      email: user.email || '',
+      password: '',
+      full_name: user.full_name || '',
+      role: user.role || 'user',
+      department: user.department || '',
+    })
+    setShowForm(true)
+  }
+
+  const handleSubmit = (event) => {
     event.preventDefault()
-    if (!form.username || !form.email || !form.password) {
+    if (!form.username || !form.email) {
+      toast.error('Username and email are required')
+      return
+    }
+
+    if (editingId) {
+      const payload = {
+        username: form.username,
+        email: form.email,
+        full_name: form.full_name,
+        role: form.role,
+        department: form.department,
+      }
+      if (form.password) payload.password = form.password
+      updateMutation.mutate({ id: editingId, payload })
+      return
+    }
+
+    if (!form.password) {
       toast.error('Username, email, and password are required')
       return
     }
     createMutation.mutate(form)
   }
+
+  const isSaving = createMutation.isPending || updateMutation.isPending
 
   if (isLoading) return <p className="text-sm text-gray-500">Loading users...</p>
   if (isError) return <p className="text-sm text-red-600">Failed to load users.</p>
@@ -83,7 +131,7 @@ export default function UserManagement() {
         <h2 className="text-base font-semibold text-gray-900">Users</h2>
         <button
           type="button"
-          onClick={() => setShowForm((prev) => !prev)}
+          onClick={() => (showForm ? closeForm() : openCreate())}
           className="rounded-md bg-primary-700 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-800"
         >
           {showForm ? 'Cancel' : 'Add user'}
@@ -91,53 +139,56 @@ export default function UserManagement() {
       </div>
 
       {showForm ? (
-        <form onSubmit={handleCreate} className="grid gap-3 rounded-lg border border-gray-200 p-4 md:grid-cols-2">
+        <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border border-gray-200 p-4 md:grid-cols-2">
+          <p className="text-sm font-medium text-gray-700 md:col-span-2">
+            {editingId ? 'Edit user' : 'Add user'}
+          </p>
           <input
             placeholder="Username"
             value={form.username}
             onChange={(e) => setForm({ ...form, username: e.target.value })}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className={inputClass}
           />
           <input
             type="email"
             placeholder="Email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className={inputClass}
           />
           <input
             type="password"
-            placeholder="Password"
+            placeholder={editingId ? 'New password (optional)' : 'Password'}
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className={inputClass}
           />
           <input
             placeholder="Full name"
             value={form.full_name}
             onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className={inputClass}
           />
           <input
             placeholder="Department"
             value={form.department}
             onChange={(e) => setForm({ ...form, department: e.target.value })}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className={inputClass}
           />
           <select
             value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value })}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className={inputClass}
           >
             <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
           <button
             type="submit"
-            disabled={createMutation.isPending}
+            disabled={isSaving}
             className="rounded-md bg-primary-700 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60 md:col-span-2"
           >
-            {createMutation.isPending ? 'Creating...' : 'Create user'}
+            {isSaving ? 'Saving...' : editingId ? 'Save changes' : 'Create user'}
           </button>
         </form>
       ) : null}
@@ -159,17 +210,7 @@ export default function UserManagement() {
                 <td className="px-3 py-2 text-gray-700">{user.full_name || user.username}</td>
                 <td className="px-3 py-2 text-gray-700">{user.username}</td>
                 <td className="px-3 py-2 text-gray-700">{user.email}</td>
-                <td className="px-3 py-2">
-                  <select
-                    value={user.role}
-                    disabled={updateMutation.isPending}
-                    onChange={(e) => updateMutation.mutate({ id: user.id, payload: { role: e.target.value } })}
-                    className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-                  >
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </td>
+                <td className="px-3 py-2 capitalize text-gray-700">{user.role}</td>
                 <td className="px-3 py-2 text-gray-700">{user.department || '-'}</td>
                 <td className="px-3 py-2">
                   <span className={`rounded-full px-2 py-1 text-xs font-medium ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -177,25 +218,34 @@ export default function UserManagement() {
                   </span>
                 </td>
                 <td className="px-3 py-2">
-                  {user.id === currentUser?.id ? (
-                    <span className="text-xs text-gray-400">Current user</span>
-                  ) : user.is_active ? (
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => deactivateMutation.mutate(user.id)}
-                      className="text-sm text-red-600 hover:underline"
-                    >
-                      Deactivate
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => updateMutation.mutate({ id: user.id, payload: { is_active: true } })}
+                      onClick={() => openEdit(user)}
                       className="text-sm text-primary-700 hover:underline"
                     >
-                      Reactivate
+                      Edit
                     </button>
-                  )}
+                    {user.id === currentUser?.id ? (
+                      <span className="text-xs text-gray-400">Current user</span>
+                    ) : user.is_active ? (
+                      <button
+                        type="button"
+                        onClick={() => deactivateMutation.mutate(user.id)}
+                        className="text-sm text-red-600 hover:underline"
+                      >
+                        Deactivate
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => updateMutation.mutate({ id: user.id, payload: { is_active: true } })}
+                        className="text-sm text-primary-700 hover:underline"
+                      >
+                        Reactivate
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

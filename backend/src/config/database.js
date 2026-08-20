@@ -13,7 +13,7 @@ export const pool = new Pool({
   database: process.env.DB_NAME     || 'vr_learning_db',
   max:      parseInt(process.env.DB_POOL_MAX || '20'),
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '30000'),
 })
 
 pool.on('error', (err) => {

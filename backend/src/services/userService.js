@@ -45,21 +45,31 @@ export const createUser = async ({ username, email, password, fullName, role, de
 }
 
 /**
- * Update user (role, is_active, full_name, department)
+ * Update user (role, is_active, full_name, department, username, email, password)
  */
 export const updateUser = async (id, fields) => {
-  const allowed = ['full_name', 'role', 'department', 'is_active', 'username']
+  const allowed = ['full_name', 'role', 'department', 'is_active', 'username', 'email']
   const updates = []
   const values  = []
   let   idx     = 1
 
   for (const key of allowed) {
     if (key in fields) {
+      const value = key === 'email' && fields[key]
+        ? String(fields[key]).toLowerCase().trim()
+        : fields[key]
       updates.push(`${key} = $${idx}`)
-      values.push(fields[key])
+      values.push(value)
       idx++
     }
   }
+
+  if (fields.password) {
+    updates.push(`password_hash = $${idx}`)
+    values.push(await bcrypt.hash(fields.password, 10))
+    idx++
+  }
+
   if (updates.length === 0) return findById(id)
 
   updates.push(`updated_at = CURRENT_TIMESTAMP`)

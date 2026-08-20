@@ -177,8 +177,8 @@ export const getMcReference = async () => {
  * Build a Map<NIP, rowObject> from MC reference.
  * Uses row at headerRowIndex as column headers.
  */
-export const buildMcLookup = async () => {
-  const { rows, headerRowIndex } = await getMcReference()
+export const buildMcLookup = async (mcRef = null) => {
+  const { rows, headerRowIndex } = mcRef || await getMcReference()
   const headerRow = rows[headerRowIndex] || []
 
   const nipColIndex = headerRow.findIndex((h) =>

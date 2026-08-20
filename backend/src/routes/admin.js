@@ -78,7 +78,7 @@ router.put('/users/:id', async (req, res, next) => {
   try {
     const { id } = req.params
     const payload = {}
-    const { username, full_name, role, department, is_active } = req.body || {}
+    const { username, email, password, full_name, role, department, is_active } = req.body || {}
 
     if (role !== undefined) {
       if (!VALID_ROLES.includes(role)) {
@@ -87,9 +87,16 @@ router.put('/users/:id', async (req, res, next) => {
       payload.role = role
     }
     if (username !== undefined) payload.username = username
+    if (email !== undefined) payload.email = email
     if (full_name !== undefined) payload.full_name = full_name
     if (department !== undefined) payload.department = department
     if (is_active !== undefined) payload.is_active = Boolean(is_active)
+    if (password) {
+      if (String(password).length < 6) {
+        return res.status(400).json({ error: 'password must be at least 6 characters' })
+      }
+      payload.password = password
+    }
 
     const existing = await findById(id)
     if (!existing) {

@@ -595,13 +595,16 @@ const patchSummary = (xml, summary) => {
 }
 
 export const buildSampleBasedExportBuffer = async () => {
-  const [nips, mcMap, logMap, vrMap, mcRef] = await Promise.all([
-    getMandatoryNipList(),
-    buildMcLookup(),
+  // Query DB first, then parse Excel files sequentially.
+  // Parallel xlsx.readFile blocks the event loop and makes new Postgres
+  // connections hit "timeout exceeded when trying to connect".
+  const [logMap, vrMap] = await Promise.all([
     fetchLogData(),
     fetchVrData(),
-    getMcReference(),
   ])
+  const nips = await getMandatoryNipList()
+  const mcRef = await getMcReference()
+  const mcMap = await buildMcLookup(mcRef)
 
   const templatePath = await getExportTemplatePath()
   const sampleBuffer = fs.readFileSync(templatePath)
