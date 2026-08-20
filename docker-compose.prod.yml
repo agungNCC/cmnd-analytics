@@ -68,9 +68,10 @@ services:
       REFERENCE_DEFAULT_DIR: /app/samples
       EXPORT_SAMPLE_PATH: /app/samples/template.xlsx
       RUN_WORKERS: "false"
-      NODE_OPTIONS: "--max-old-space-size=512"
+      NODE_OPTIONS: "--max-old-space-size=384"
     ports:
       - "5000:5000"
+    mem_limit: 768m
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,7 +120,8 @@ services:
       MAX_FILE_SIZE: ${MAX_FILE_SIZE}
       REFERENCE_DEFAULT_DIR: /app/samples
       EXPORT_SAMPLE_PATH: /app/samples/template.xlsx
-      NODE_OPTIONS: "--max-old-space-size=1536"
+      NODE_OPTIONS: "--max-old-space-size=1024"
+    mem_limit: 1536m
     depends_on:
       postgres:
         condition: service_healthy

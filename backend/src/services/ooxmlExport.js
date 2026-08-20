@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import JSZip from 'jszip'
 import { query } from '../config/database.js'
 import {
@@ -442,67 +443,40 @@ const buildMandatoryRow = (rowNumber, nip, ranges) => {
 
 const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve))
 
-const buildRowsInChunks = async (items, buildRow, chunkSize = 250) => {
-  const parts = []
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize)
-    parts.push(chunk.map((item, offset) => buildRow(item, i + offset)).join(''))
-    // Keep status/health endpoints responsive while building large sheets.
-    await yieldToEventLoop()
-  }
-  return parts.join('')
-}
-
-const patchMandatoryNips = async (xml, nips, ranges) => {
+const patchMandatoryNipsToFile = async (xml, nips, ranges, outputPath) => {
   const sheetData = xml.match(/<sheetData>(.*?)<\/sheetData>/)
   if (!sheetData) throw new Error('Mandatory worksheet sheetData not found')
 
   const headerMatch = sheetData[1].match(/<row\b[^>]*\br="1"[^>]*(?:\/>|>.*?<\/row>)/)
   if (!headerMatch) throw new Error('Mandatory worksheet header row not found')
 
-  const dataRows = await buildRowsInChunks(
-    nips,
-    (nip, index) => buildMandatoryRow(index + 2, nip, ranges),
-  )
   const lastRow = Math.max(1, nips.length + 1)
   const dimension = `A1:W${lastRow}`
-
-  return xml
+  const prefix = xml
     .replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="${dimension}"/>`)
-    .replace(/<sheetData>.*?<\/sheetData>/, `<sheetData>${headerMatch[0]}${dataRows}</sheetData>`)
     .replace(/<autoFilter ref="[^"]+"/, `<autoFilter ref="${dimension}"`)
-}
+    .replace(/<sheetData>.*?<\/sheetData>/, '___SHEET_DATA___')
 
-const buildMcSheetXml = async (rows) => {
-  const maxCols = rows.reduce((max, row) => Math.max(max, row?.length || 0), 1)
-  const lastRow = Math.max(rows.length, 1)
-  const dimension = `A1:${columnName(maxCols - 1)}${lastRow}`
-  const rowXml = await buildRowsInChunks(rows, (row, index) => {
-    const rowNumber = index + 1
-    const cells = (row || []).map((value, colIndex) => {
-      if (value === null || value === undefined || value === '') return ''
-      const numeric = typeof value === 'number'
-        ? value
-        : (String(value).trim() !== '' && Number.isFinite(Number(value)) && !/^0\d+/.test(String(value).trim())
-          ? Number(value)
-          : value)
-      return valueCell(
-        `${columnName(colIndex)}${rowNumber}`,
-        Number.isFinite(numeric) && typeof numeric === 'number' ? numeric : value,
-        null,
-        { forceText: typeof numeric !== 'number' },
-      )
-    }).join('')
-    return `<row r="${rowNumber}" spans="1:${maxCols}">${cells}</row>`
-  })
+  const [before, after] = prefix.split('___SHEET_DATA___')
+  if (after === undefined) throw new Error('Failed to split mandatory worksheet')
 
-  return (
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
-    `<dimension ref="${dimension}"/>` +
-    `<sheetData>${rowXml}</sheetData>` +
-    `</worksheet>`
-  )
+  const handle = await fs.promises.open(outputPath, 'w')
+  try {
+    await handle.writeFile(before)
+    await handle.writeFile(`<sheetData>${headerMatch[0]}`)
+
+    const chunkSize = 150
+    for (let i = 0; i < nips.length; i += chunkSize) {
+      const chunk = nips.slice(i, i + chunkSize)
+      const xmlChunk = chunk.map((nip, offset) => buildMandatoryRow(i + offset + 2, nip, ranges)).join('')
+      await handle.writeFile(xmlChunk)
+      await yieldToEventLoop()
+    }
+
+    await handle.writeFile(`</sheetData>${after}`)
+  } finally {
+    await handle.close()
+  }
 }
 
 const resolveZipTarget = (target) => {
@@ -663,101 +637,115 @@ const patchSummary = (xml, summary) => {
 }
 
 export const buildSampleBasedExportBuffer = async () => {
-  // Query DB first, then parse Excel files sequentially.
-  // Parallel xlsx.readFile blocks the event loop and makes new Postgres
-  // connections hit "timeout exceeded when trying to connect".
-  const [logMap, vrMap] = await Promise.all([
-    fetchLogData(),
-    fetchVrData(),
-  ])
-  const nips = await getMandatoryNipList()
-  const mcRef = await getMcReference()
-  const mcMap = await buildMcLookup(mcRef)
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cmnd-export-'))
+  const mandatoryPath = path.join(tempDir, 'sheet2.xml')
 
-  const templatePath = await getExportTemplatePath()
-  const sampleBuffer = fs.readFileSync(templatePath)
-  const zip = await JSZip.loadAsync(sampleBuffer)
-
-  const [
-    summaryXml,
-    mandatoryXml,
-    logXml,
-    vrXml,
-    sharedStringsXml,
-    workbookXml,
-  ] = await Promise.all([
-    zip.file('xl/worksheets/sheet1.xml').async('string'),
-    zip.file('xl/worksheets/sheet2.xml').async('string'),
-    zip.file('xl/worksheets/sheet3.xml').async('string'),
-    zip.file('xl/worksheets/sheet4.xml').async('string'),
-    zip.file('xl/sharedStrings.xml').async('string'),
-    zip.file('xl/workbook.xml').async('string'),
-  ])
-
-  const logDefaults = parseLogDefaults(logXml, sharedStringsXml)
-  for (const [employeeId, employee] of logMap) {
-    const defaults = logDefaults.get(employeeId)
-    if (!defaults) continue
-    employee.hireDate = defaults.hireDate
-    employee.email = defaults.email
-    employee.statusActive = defaults.statusActive
-    if (!Number.isFinite(employee.overallCompletion)) {
-      employee.overallCompletion = defaults.overallCompletion
+  try {
+    // Query DB first, then parse Excel files sequentially.
+    const [logMap, vrMap] = await Promise.all([
+      fetchLogData(),
+      fetchVrData(),
+    ])
+    const nips = await getMandatoryNipList()
+    const mcRef = await getMcReference()
+    const mcMap = await buildMcLookup(mcRef)
+    const ranges = {
+      mcSheet: mcRef.sheetName,
+      mcLastRow: Math.max(4, mcRef.rows.length),
+      mcFilePath: mcRef.filePath,
+      mcSheetName: mcRef.sheetName,
     }
+
+    // Free heavy workbook objects before XML generation.
+    mcRef.wb = null
+    mcRef.rows = null
+
+    const templatePath = await getExportTemplatePath()
+    const sampleBuffer = fs.readFileSync(templatePath)
+    const zip = await JSZip.loadAsync(sampleBuffer)
+
+    const [
+      summaryXml,
+      mandatoryXml,
+      logXml,
+      vrXml,
+      sharedStringsXml,
+      workbookXml,
+    ] = await Promise.all([
+      zip.file('xl/worksheets/sheet1.xml').async('string'),
+      zip.file('xl/worksheets/sheet2.xml').async('string'),
+      zip.file('xl/worksheets/sheet3.xml').async('string'),
+      zip.file('xl/worksheets/sheet4.xml').async('string'),
+      zip.file('xl/sharedStrings.xml').async('string'),
+      zip.file('xl/workbook.xml').async('string'),
+    ])
+
+    const logDefaults = parseLogDefaults(logXml, sharedStringsXml)
+    for (const [employeeId, employee] of logMap) {
+      const defaults = logDefaults.get(employeeId)
+      if (!defaults) continue
+      employee.hireDate = defaults.hireDate
+      employee.email = defaults.email
+      employee.statusActive = defaults.statusActive
+      if (!Number.isFinite(employee.overallCompletion)) {
+        employee.overallCompletion = defaults.overallCompletion
+      }
+    }
+
+    const summary = buildSummary(nips, mcMap, logMap, vrMap)
+    const logRows = buildLogRows(logXml, logMap)
+    const vrRows = buildVrRows(vrXml, vrMap)
+    ranges.logLastRow = Math.max(3, 3 + logRows.length)
+    ranges.vrLastRow = Math.max(2, 2 + vrRows.length)
+
+    zip.file('xl/worksheets/sheet1.xml', patchSummary(summaryXml, summary))
+    await yieldToEventLoop()
+
+    await patchMandatoryNipsToFile(mandatoryXml, nips, ranges, mandatoryPath)
+    zip.file('xl/worksheets/sheet2.xml', fs.createReadStream(mandatoryPath))
+
+    zip.file('xl/worksheets/sheet3.xml', replaceDataRows(logXml, 3, logRows, 34))
+    zip.file('xl/worksheets/sheet4.xml', replaceDataRows(vrXml, 2, vrRows, 11))
+
+    const [workbookRels, contentTypes] = await Promise.all([
+      zip.file('xl/_rels/workbook.xml.rels').async('string'),
+      zip.file('[Content_Types].xml').async('string'),
+    ])
+
+    const attached = await attachMcSheet(
+      zip,
+      workbookXml,
+      workbookRels,
+      contentTypes,
+      ranges.mcSheetName,
+      ranges.mcFilePath,
+    )
+
+    zip.remove('xl/calcChain.xml')
+    zip.file('xl/workbook.xml', attached.workbookXml)
+    zip.file(
+      'xl/_rels/workbook.xml.rels',
+      attached.workbookRels.replace(
+        /<Relationship\b(?=[^>]*Type="[^"]*\/calcChain")[^>]*\/>/,
+        '',
+      ),
+    )
+    zip.file(
+      '[Content_Types].xml',
+      attached.contentTypes.replace(
+        /<Override\b(?=[^>]*PartName="\/xl\/calcChain\.xml")[^>]*\/>/,
+        '',
+      ),
+    )
+
+    return zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 1 },
+      platform: 'DOS',
+      streamFiles: true,
+    })
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {})
   }
-
-  const summary = buildSummary(nips, mcMap, logMap, vrMap)
-  const logRows = buildLogRows(logXml, logMap)
-  const vrRows = buildVrRows(vrXml, vrMap)
-  const ranges = {
-    mcSheet: mcRef.sheetName,
-    mcLastRow: Math.max(4, mcRef.rows.length),
-    logLastRow: Math.max(3, 3 + logRows.length),
-    vrLastRow: Math.max(2, 2 + vrRows.length),
-  }
-
-  zip.file('xl/worksheets/sheet1.xml', patchSummary(summaryXml, summary))
-  await yieldToEventLoop()
-  zip.file('xl/worksheets/sheet2.xml', await patchMandatoryNips(mandatoryXml, nips, ranges))
-  await yieldToEventLoop()
-  zip.file('xl/worksheets/sheet3.xml', replaceDataRows(logXml, 3, logRows, 34))
-  zip.file('xl/worksheets/sheet4.xml', replaceDataRows(vrXml, 2, vrRows, 11))
-
-  const [workbookRels, contentTypes] = await Promise.all([
-    zip.file('xl/_rels/workbook.xml.rels').async('string'),
-    zip.file('[Content_Types].xml').async('string'),
-  ])
-
-  const attached = await attachMcSheet(
-    zip,
-    workbookXml,
-    workbookRels,
-    contentTypes,
-    mcRef.sheetName,
-    mcRef.filePath,
-  )
-
-  zip.remove('xl/calcChain.xml')
-  zip.file('xl/workbook.xml', attached.workbookXml)
-  zip.file(
-    'xl/_rels/workbook.xml.rels',
-    attached.workbookRels.replace(
-      /<Relationship\b(?=[^>]*Type="[^"]*\/calcChain")[^>]*\/>/,
-      '',
-    ),
-  )
-  zip.file(
-    '[Content_Types].xml',
-    attached.contentTypes.replace(
-      /<Override\b(?=[^>]*PartName="\/xl\/calcChain\.xml")[^>]*\/>/,
-      '',
-    ),
-  )
-
-  return zip.generateAsync({
-    type: 'nodebuffer',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 },
-    platform: 'DOS',
-  })
 }

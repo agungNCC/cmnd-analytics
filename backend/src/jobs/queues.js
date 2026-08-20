@@ -11,8 +11,31 @@ const redis = {
   password: process.env.REDIS_PASSWORD || undefined,
 }
 
-export const uploadQueue = new Queue('cmnd-upload', { redis })
-export const exportQueue = new Queue('cmnd-export', { redis })
+export const uploadQueue = new Queue('cmnd-upload', {
+  redis,
+  defaultJobOptions: {
+    removeOnComplete: 20,
+    removeOnFail: 50,
+    attempts: 2,
+    backoff: { type: 'fixed', delay: 5000 },
+  },
+})
+
+export const exportQueue = new Queue('cmnd-export', {
+  redis,
+  settings: {
+    // Export can take several minutes on large Mandatory sheets.
+    lockDuration: 15 * 60 * 1000,
+    stalledInterval: 60 * 1000,
+    maxStalledCount: 2,
+  },
+  defaultJobOptions: {
+    removeOnComplete: 20,
+    removeOnFail: 50,
+    attempts: 1,
+    timeout: 20 * 60 * 1000,
+  },
+})
 
 let workersStarted = false
 
@@ -27,8 +50,15 @@ export const startWorkers = () => {
 
   exportQueue.process(1, async (job) => {
     logger.info(`Processing export job ${job.data.exportId}`)
-    await job.progress(15)
-    await processExportJob(job.data, (progress) => job.progress(progress))
+    const keepAlive = setInterval(() => {
+      job.progress(job.progress() || 15).catch(() => {})
+    }, 30_000)
+    try {
+      await job.progress(15)
+      await processExportJob(job.data, (progress) => job.progress(progress))
+    } finally {
+      clearInterval(keepAlive)
+    }
   })
 
   uploadQueue.on('failed', (job, err) => {
