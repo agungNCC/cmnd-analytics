@@ -440,28 +440,44 @@ const buildMandatoryRow = (rowNumber, nip, ranges) => {
   return `<row r="${rowNumber}" spans="1:23">${cells.join('')}</row>`
 }
 
-const patchMandatoryNips = (xml, nips, ranges) => {
+const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve))
+
+const buildRowsInChunks = async (items, buildRow, chunkSize = 250) => {
+  const parts = []
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize)
+    parts.push(chunk.map((item, offset) => buildRow(item, i + offset)).join(''))
+    // Keep status/health endpoints responsive while building large sheets.
+    await yieldToEventLoop()
+  }
+  return parts.join('')
+}
+
+const patchMandatoryNips = async (xml, nips, ranges) => {
   const sheetData = xml.match(/<sheetData>(.*?)<\/sheetData>/)
   if (!sheetData) throw new Error('Mandatory worksheet sheetData not found')
 
   const headerMatch = sheetData[1].match(/<row\b[^>]*\br="1"[^>]*(?:\/>|>.*?<\/row>)/)
   if (!headerMatch) throw new Error('Mandatory worksheet header row not found')
 
-  const dataRows = nips.map((nip, index) => buildMandatoryRow(index + 2, nip, ranges))
+  const dataRows = await buildRowsInChunks(
+    nips,
+    (nip, index) => buildMandatoryRow(index + 2, nip, ranges),
+  )
   const lastRow = Math.max(1, nips.length + 1)
   const dimension = `A1:W${lastRow}`
 
   return xml
     .replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="${dimension}"/>`)
-    .replace(/<sheetData>.*?<\/sheetData>/, `<sheetData>${headerMatch[0]}${dataRows.join('')}</sheetData>`)
+    .replace(/<sheetData>.*?<\/sheetData>/, `<sheetData>${headerMatch[0]}${dataRows}</sheetData>`)
     .replace(/<autoFilter ref="[^"]+"/, `<autoFilter ref="${dimension}"`)
 }
 
-const buildMcSheetXml = (rows) => {
+const buildMcSheetXml = async (rows) => {
   const maxCols = rows.reduce((max, row) => Math.max(max, row?.length || 0), 1)
   const lastRow = Math.max(rows.length, 1)
   const dimension = `A1:${columnName(maxCols - 1)}${lastRow}`
-  const rowXml = rows.map((row, index) => {
+  const rowXml = await buildRowsInChunks(rows, (row, index) => {
     const rowNumber = index + 1
     const cells = (row || []).map((value, colIndex) => {
       if (value === null || value === undefined || value === '') return ''
@@ -478,7 +494,7 @@ const buildMcSheetXml = (rows) => {
       )
     }).join('')
     return `<row r="${rowNumber}" spans="1:${maxCols}">${cells}</row>`
-  }).join('')
+  })
 
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -489,8 +505,8 @@ const buildMcSheetXml = (rows) => {
   )
 }
 
-const attachMcSheet = (zip, workbookXml, workbookRels, contentTypes, sheetName, rows) => {
-  zip.file('xl/worksheets/sheet5.xml', buildMcSheetXml(rows))
+const attachMcSheet = async (zip, workbookXml, workbookRels, contentTypes, sheetName, rows) => {
+  zip.file('xl/worksheets/sheet5.xml', await buildMcSheetXml(rows))
 
   const safeName = xmlEscape(sheetName).slice(0, 31)
   const nextWorkbook = workbookXml.replace(
@@ -649,7 +665,9 @@ export const buildSampleBasedExportBuffer = async () => {
   }
 
   zip.file('xl/worksheets/sheet1.xml', patchSummary(summaryXml, summary))
-  zip.file('xl/worksheets/sheet2.xml', patchMandatoryNips(mandatoryXml, nips, ranges))
+  await yieldToEventLoop()
+  zip.file('xl/worksheets/sheet2.xml', await patchMandatoryNips(mandatoryXml, nips, ranges))
+  await yieldToEventLoop()
   zip.file('xl/worksheets/sheet3.xml', replaceDataRows(logXml, 3, logRows, 34))
   zip.file('xl/worksheets/sheet4.xml', replaceDataRows(vrXml, 2, vrRows, 11))
 
@@ -658,7 +676,7 @@ export const buildSampleBasedExportBuffer = async () => {
     zip.file('[Content_Types].xml').async('string'),
   ])
 
-  const attached = attachMcSheet(
+  const attached = await attachMcSheet(
     zip,
     workbookXml,
     workbookRels,

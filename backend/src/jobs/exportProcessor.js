@@ -28,13 +28,13 @@ export const processExportJob = async (jobData, onProgress = async () => {}) => 
     await onProgress(20)
 
     const buffer = await buildExportBuffer()
-
-    await query(`UPDATE export_jobs SET progress = 70 WHERE id = $1`, [exportId])
     await onProgress(70)
+    await query(`UPDATE export_jobs SET progress = 70 WHERE id = $1`, [exportId])
 
     const exportFilename = buildExportFilename()
     const filePath = path.join(exportDir, `${exportId}_${exportFilename}`)
-    fs.writeFileSync(filePath, buffer)
+    await fs.promises.writeFile(filePath, buffer)
+    await onProgress(90)
 
     await query(
       `UPDATE export_jobs

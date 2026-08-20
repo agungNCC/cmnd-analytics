@@ -65,7 +65,7 @@ services:
       LOG_FORMAT: json
       UPLOAD_DIR: /app/uploads
       MAX_FILE_SIZE: ${MAX_FILE_SIZE}
-      NODE_OPTIONS: "--max-old-space-size=512"
+      NODE_OPTIONS: "--max-old-space-size=1024"
     ports:
       - "5000:5000"
     depends_on:
@@ -87,11 +87,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '1.5'
+          memory: 1536M
         reservations:
           cpus: '0.5'
-          memory: 256M
+          memory: 512M
 
   # ==================== Frontend (Nginx) ====================
   frontend:
