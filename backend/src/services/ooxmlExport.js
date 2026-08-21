@@ -527,7 +527,11 @@ const attachMcSheet = async (zip, workbookXml, workbookRels, contentTypes, sheet
   }
 
   // Drop drawing/printer relationships that are not copied into the export package.
+  // Formulas in the source MC sheet can carry shared/array formula metadata that
+  // is only valid in the original workbook. Keep their cached values instead.
   sheetXml = sheetXml
+    .replace(/<f\b[^>]*\/>/g, '')
+    .replace(/<f\b[^>]*>.*?<\/f>/g, '')
     .replace(/<drawing\b[^>]*\/>/g, '')
     .replace(/<legacyDrawing\b[^>]*\/>/g, '')
     .replace(/<pageSetup\b[^>]*\/>/g, '')
