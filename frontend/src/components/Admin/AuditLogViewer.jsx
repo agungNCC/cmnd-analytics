@@ -121,8 +121,17 @@ export default function AuditLogViewer() {
                       {log.status}
                     </span>
                   </td>
-                  <td className="max-w-xs truncate px-3 py-2 text-gray-500" title={JSON.stringify(log.details || {})}>
-                    {log.error_message || (log.details ? JSON.stringify(log.details) : '-')}
+                  <td className="max-w-sm px-3 py-2 text-gray-500">
+                    {log.error_message || log.details ? (
+                      <details>
+                        <summary className="cursor-pointer font-medium text-gray-700 hover:text-primary-700">
+                          View full details
+                        </summary>
+                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-gray-50 p-3 text-xs text-gray-700">
+                          {log.error_message || JSON.stringify(log.details, null, 2)}
+                        </pre>
+                      </details>
+                    ) : '-'}
                   </td>
                 </tr>
               ))}

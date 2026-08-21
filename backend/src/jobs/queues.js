@@ -16,8 +16,9 @@ export const uploadQueue = new Queue('cmnd-upload', {
   defaultJobOptions: {
     removeOnComplete: 20,
     removeOnFail: 50,
-    attempts: 2,
-    backoff: { type: 'fixed', delay: 5000 },
+    // processUploadJob removes temporary files in its finally block.
+    // Retrying would only replace the original error with ENOENT.
+    attempts: 1,
   },
 })
 

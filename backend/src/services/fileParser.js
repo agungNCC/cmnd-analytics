@@ -4,7 +4,8 @@ const ALIASES = {
   employee_id: [
     'employee_id', 'employeeid', 'emp_id', 'nik', 'npp', 'personnel_number',
     'personnel_no', 'id_karyawan', 'no_pegawai', 'nomor_induk', 'staff_id',
-    'username', 'user_name', 'login_name', 'login',
+    'username', 'user_name', 'login_name', 'login', 'emp', 'emp_no',
+    'employee_no', 'employee_number', 'personnel_id',
   ],
   employee_name: [
     'employee_name', 'employeename', 'nama', 'name', 'nama_karyawan',
@@ -212,35 +213,51 @@ const parseCourseCell = (value) => {
   }
 }
 
-const isWideLogPlus = (rows) => {
-  const headerKeys = (rows[0] || []).map(normalizeKey)
-  const hasUsername = headerKeys.includes('username') || headerKeys.includes('nik')
-  const hasName = headerKeys.includes('name') || headerKeys.includes('nama')
-  const hasDirectorate = headerKeys.includes('directorate')
-  const hasCourse = headerKeys.includes('course_name') || headerKeys.includes('course')
-  const extraColumns = headerKeys.slice(9).filter(Boolean).length
-  return hasUsername && hasName && hasDirectorate && !hasCourse && extraColumns >= 1
+const findWideLogHeaderIndex = (rows) => {
+  const limit = Math.min(rows.length, 12)
+  for (let index = 0; index < limit; index += 1) {
+    const headerKeys = (rows[index] || []).map(normalizeKey).filter(Boolean)
+    const hasEmployeeId = headerKeys.some((key) => ALIASES.employee_id.includes(key))
+    const hasName = headerKeys.some((key) => ALIASES.employee_name.includes(key))
+    const hasDirectorate = headerKeys.some((key) => ALIASES.directorate.includes(key))
+    const hasCourse = headerKeys.some((key) => ALIASES.course_name.includes(key))
+    const extraColumns = headerKeys.filter((key) => !LOG_IDENTITY_KEYS.has(key)).length
+
+    if (hasEmployeeId && hasName && hasDirectorate && !hasCourse && extraColumns >= 1) {
+      return index
+    }
+  }
+  return -1
 }
 
-const parseWideLogPlus = (rows) => {
-  const headerRow = rows[0] || []
-  const dataStart = findDataStartIndex(rows, 1)
-  if (dataStart < 0 || dataStart >= rows.length) {
-    throw new Error('Workbook "LOG+" is empty')
-  }
+const isWideLogPlus = (rows) => findWideLogHeaderIndex(rows) >= 0
 
-  const courseHeaderRow = rows[Math.max(dataStart - 1, 0)] || []
+const parseWideLogPlus = (rows) => {
+  const headerIndex = findWideLogHeaderIndex(rows)
+  const headerRow = rows[headerIndex] || []
   const identityIndex = {}
   headerRow.forEach((cell, index) => {
     const key = normalizeKey(cell)
     if (!key) return
-    if (['username', 'nik', 'employee_id'].includes(key)) identityIndex.employee_id = index
-    if (['name', 'nama', 'employee_name'].includes(key)) identityIndex.employee_name = index
-    if (key === 'directorate') identityIndex.directorate = index
-    if (key === 'sub_directorate') identityIndex.sub_directorate = index
+    if (ALIASES.employee_id.includes(key)) identityIndex.employee_id = index
+    if (ALIASES.employee_name.includes(key)) identityIndex.employee_name = index
+    if (ALIASES.directorate.includes(key)) identityIndex.directorate = index
+    if (ALIASES.sub_directorate.includes(key)) identityIndex.sub_directorate = index
     if (key === 'completion') identityIndex.overall_completion = index
   })
 
+  const dataStart = rows.findIndex((row, index) => {
+    if (index <= headerIndex) return false
+    const employeeId = row?.[identityIndex.employee_id]
+    const employeeName = row?.[identityIndex.employee_name]
+    return employeeId !== null && employeeId !== undefined && employeeId !== '' &&
+      employeeName !== null && employeeName !== undefined && employeeName !== ''
+  })
+  if (dataStart < 0) {
+    throw new Error('Workbook "LOG+" does not contain employee data rows')
+  }
+
+  const courseHeaderRow = rows[Math.max(dataStart - 1, headerIndex)] || []
   const courseColumns = []
   const width = Math.max(headerRow.length, courseHeaderRow.length)
   for (let index = 0; index < width; index += 1) {
@@ -262,7 +279,7 @@ const parseWideLogPlus = (rows) => {
     const row = rows[i] || []
     const employeeId = row[identityIndex.employee_id]
     const employeeName = row[identityIndex.employee_name]
-    if (!looksLikeEmployeeId(employeeId) && !employeeName) continue
+    if (employeeId === null || employeeId === undefined || employeeId === '' || !employeeName) continue
     const overallCompletion = parsePercent(row[identityIndex.overall_completion])
 
     for (const course of courseColumns) {
@@ -319,6 +336,7 @@ const parseGeneric = (rows, requiredColumns, sheetLabel) => {
       raw[header] = row[index] ?? null
     })
     const mapped = normalizeMappedRow(raw)
+    if (!mapped.employee_id && !mapped.employee_name) continue
     const hasValue = Object.values(mapped).some((value) => value !== null && value !== '')
     if (!hasValue) continue
     mappedRows.push(mapped)

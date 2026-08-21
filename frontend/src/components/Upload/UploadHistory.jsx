@@ -27,7 +27,7 @@ export default function UploadHistory({ items, isLoading, isError }) {
       <table className="min-w-full divide-y divide-gray-200 text-sm">
         <thead className="bg-gray-50">
           <tr>
-            {['Date', 'User', 'LOG+ File', 'VR File', 'Rows', 'Status'].map((label) => (
+            {['Date', 'User', 'LOG+ File', 'VR File', 'Rows', 'Status', 'Error details'].map((label) => (
               <th key={label} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                 {label}
               </th>
@@ -50,6 +50,18 @@ export default function UploadHistory({ items, isLoading, isError }) {
                 <span className={`rounded-full px-2 py-1 text-xs font-medium ${statusClass[item.processing_status] || statusClass.pending}`}>
                   {item.processing_status}
                 </span>
+              </td>
+              <td className="max-w-sm px-3 py-2 text-gray-600">
+                {item.error_message ? (
+                  <details>
+                    <summary className="cursor-pointer font-medium text-red-700 hover:text-red-800">
+                      View full error
+                    </summary>
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-red-50 p-3 text-xs text-red-800">
+                      {item.error_message}
+                    </pre>
+                  </details>
+                ) : '-'}
               </td>
             </tr>
           ))}
