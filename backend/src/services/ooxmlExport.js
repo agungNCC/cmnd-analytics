@@ -529,7 +529,10 @@ const attachMcSheet = async (zip, workbookXml, workbookRels, contentTypes, sheet
   // Drop drawing/printer relationships that are not copied into the export package.
   // Formulas in the source MC sheet can carry shared/array formula metadata that
   // is only valid in the original workbook. Keep their cached values instead.
+  // The source MC workbook marks its only tab as selected. Keeping that flag
+  // would group MC with Summary All and disable PivotTable Analyze in Excel.
   sheetXml = sheetXml
+    .replace(/(<sheetView\b[^>]*)\s+tabSelected="1"/, '$1')
     .replace(/<f\b[^>]*\/>/g, '')
     .replace(/<f\b[^>]*>.*?<\/f>/g, '')
     .replace(/<drawing\b[^>]*\/>/g, '')

@@ -3,6 +3,7 @@ import toast from 'react-hot-toast'
 import Mandatory2026Table from '../components/Dashboard/Mandatory2026Table.jsx'
 import LogPlusTable from '../components/Dashboard/LogPlusTable.jsx'
 import VRLearningTable from '../components/Dashboard/VRLearningTable.jsx'
+import ExportLoadingScreen from '../components/Export/ExportLoadingScreen.jsx'
 import { useExport } from '../hooks/useExport.js'
 
 const TABS = [
@@ -27,6 +28,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {isExporting ? <ExportLoadingScreen progress={progress} /> : null}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
