@@ -145,21 +145,37 @@ const isSubHeaderRow = (row = []) => {
 
 const readSheetMatrix = (filePath, sheetLabel) => {
   const workbook = xlsx.readFile(filePath)
-  const firstSheetName = workbook.SheetNames[0]
-  if (!firstSheetName) {
+  if (!workbook.SheetNames.length) {
     throw new Error(`Workbook "${sheetLabel}" does not contain any sheets`)
   }
-  const sheet = workbook.Sheets[firstSheetName]
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false })
-  if (!rows.length) {
+
+  const expectedName = normalizeKey(sheetLabel)
+  let best = null
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName]
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false })
+    if (!rows.length) continue
+
+    const headerInfo = findHeaderRowIndex(rows)
+    const normalizedName = normalizeKey(sheetName)
+    const nameBonus = normalizedName === expectedName || normalizedName.includes(expectedName) ? 2 : 0
+    const candidate = {
+      rows,
+      sheetName,
+      score: headerInfo.score + nameBonus,
+    }
+    if (!best || candidate.score > best.score) best = candidate
+  }
+
+  if (!best) {
     throw new Error(`Workbook "${sheetLabel}" is empty`)
   }
-  return rows
+  return best.rows
 }
 
 const findHeaderRowIndex = (rows) => {
   let best = { index: 0, score: -1 }
-  const limit = Math.min(rows.length, 12)
+  const limit = Math.min(rows.length, 100)
   for (let i = 0; i < limit; i += 1) {
     const score = scoreHeaderRow(rows[i] || [])
     if (score > best.score) best = { index: i, score }
@@ -214,7 +230,7 @@ const parseCourseCell = (value) => {
 }
 
 const findWideLogHeaderIndex = (rows) => {
-  const limit = Math.min(rows.length, 12)
+  const limit = Math.min(rows.length, 100)
   for (let index = 0; index < limit; index += 1) {
     const headerKeys = (rows[index] || []).map(normalizeKey).filter(Boolean)
     const hasEmployeeId = headerKeys.some((key) => ALIASES.employee_id.includes(key))
@@ -310,9 +326,14 @@ const parseWideLogPlus = (rows) => {
 const parseGeneric = (rows, requiredColumns, sheetLabel) => {
   const headerInfo = findHeaderRowIndex(rows)
   if (headerInfo.score < 4) {
+    const detectedHeaders = (rows[headerInfo.index] || [])
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 30)
     throw new Error(
       `Sheet "${sheetLabel}" is missing required columns (or values): ${requiredColumns.join(', ')}. ` +
-      'Accepted aliases include NIK/USERNAME/employee_id, Nama/employee_name, Direktorat/directorate, etc.',
+      'Accepted aliases include NIK/USERNAME/employee_id, Nama/employee_name, Direktorat/directorate, etc. ' +
+      `Detected headers: ${detectedHeaders.length ? detectedHeaders.join(' | ') : '(none)'}`,
     )
   }
 
